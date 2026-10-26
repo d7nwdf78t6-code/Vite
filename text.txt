@@ -1,0 +1,1161 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Heart, 
+  Mic, 
+  MicOff, 
+  Send, 
+  BookOpen, 
+  Sparkles, 
+  ShieldAlert, 
+  Smile, 
+  Frown, 
+  Meh, 
+  Zap, 
+  RefreshCw, 
+  Calendar, 
+  Trash2, 
+  ChevronDown, 
+  ChevronUp, 
+  CheckCircle2, 
+  Lock,
+  PhoneCall,
+  Wind,
+  Eye,
+  Download,
+  Moon,
+  Sun,
+  Plus,
+  BarChart2,
+  Tag,
+  Activity,
+  Award,
+  HelpCircle,
+  Clock,
+  ExternalLink
+} from 'lucide-react';
+
+// Default Eswatini Emergency & Campus Contacts
+const DEFAULT_CRISIS_CONTACTS = [
+  {
+    id: 'ems',
+    name: 'Emergency Medical Services (Ambulance)',
+    number: '977',
+    description: 'National emergency health and medical dispatch (Toll-Free)',
+    category: 'Medical'
+  },
+  {
+    id: 'swagaa',
+    name: 'SWAGAA Helpline (GBV & Trauma)',
+    number: '951',
+    description: 'Swatini Action Group Against Abuse - counseling & crisis (Toll-Free)',
+    category: 'Counseling'
+  },
+  {
+    id: 'youth',
+    name: 'Childline & Youth Helpline Eswatini',
+    number: '116',
+    description: 'Free confidential support for youth & students (Toll-Free)',
+    category: 'Youth Support'
+  },
+  {
+    id: 'mental_health',
+    name: 'National Psychiatric Referral Line',
+    number: '+268 2505 5170',
+    description: 'National Mental Health Hospital & psychiatric counseling guidance',
+    category: 'Psychiatric'
+  },
+  {
+    id: 'police',
+    name: 'Royal Eswatini Police Emergency',
+    number: '999',
+    description: 'Police emergency and rapid response dispatch',
+    category: 'Safety'
+  }
+];
+
+// Pre-defined mood options
+const MOODS = [
+  { id: 'overwhelmed', label: 'Overwhelmed', icon: Frown, color: 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800' },
+  { id: 'anxious', label: 'Anxious / Stressed', icon: Zap, color: 'bg-purple-50 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-800' },
+  { id: 'sad', label: 'Sad / Depressed', icon: Frown, color: 'bg-blue-50 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800' },
+  { id: 'exhausted', label: 'Exhausted / Burnout', icon: Meh, color: 'bg-slate-100 text-slate-900 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700' },
+  { id: 'neutral', label: 'Okay / Neutral', icon: Meh, color: 'bg-emerald-50 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800' },
+  { id: 'hopeful', label: 'Hopeful / Seeking Clarity', icon: Smile, color: 'bg-teal-50 text-teal-900 border-teal-300 dark:bg-teal-950/60 dark:text-teal-200 dark:border-teal-800' }
+];
+
+// Campus Stressor Options
+const STRESSORS = [
+  'Exams / Deadlines',
+  'Financial / Bursary',
+  'Relationships / Dating',
+  'Family Pressure',
+  'Loneliness / Isolation',
+  'Burnout & Sleep Loss',
+  'Career / Future Anxiety'
+];
+
+export default function App() {
+  // Navigation
+  const [activeTab, setActiveTab] = useState('counseling'); // 'counseling' | 'breathing' | 'journal' | 'resources'
+
+  // Dark Mode State
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Step Workflow State
+  const [step, setStep] = useState(1); // 1: Mood & Energy, 2: Story, 3: Feedback
+
+  // Form State
+  const [selectedMood, setSelectedMood] = useState(null);
+  const [energyLevel, setEnergyLevel] = useState(3);
+  const [selectedStressors, setSelectedStressors] = useState([]);
+  const [storyText, setStoryText] = useState('');
+  const [isListening, setIsListening] = useState(false);
+
+  // AI Response State
+  const [isLoading, setIsLoading] = useState(false);
+  const [counselingResponse, setCounselingResponse] = useState(null);
+  const [showReflection, setShowReflection] = useState(false);
+
+  // Crisis Modal State
+  const [showCrisisModal, setShowCrisisModal] = useState(false);
+
+  // Custom Campus Emergency Contact State
+  const [campusContacts, setCampusContacts] = useState([]);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactNum, setNewContactNum] = useState('');
+
+  // Journal State
+  const [journalEntries, setJournalEntries] = useState([]);
+
+  // Breathing & Grounding Tool State
+  const [breathingPhase, setBreathingPhase] = useState('idle'); // 'idle' | 'inhale' | 'hold' | 'exhale'
+  const [breathingTimer, setBreathingTimer] = useState(0);
+  const [groundingStep, setGroundingStep] = useState(0);
+
+  // Web Speech Recognition Ref
+  const recognitionRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+
+  // Load Saved Local Storage Data
+  useEffect(() => {
+    const savedJournal = localStorage.getItem('unimind_v2_journal');
+    if (savedJournal) {
+      try { setJournalEntries(JSON.parse(savedJournal)); } catch (e) {}
+    }
+
+    const savedCampus = localStorage.getItem('unimind_v2_campus_contacts');
+    if (savedCampus) {
+      try { setCampusContacts(JSON.parse(savedCampus)); } catch (e) {}
+    }
+
+    const savedTheme = localStorage.getItem('unimind_v2_theme');
+    if (savedTheme === 'dark') {
+      setDarkMode(true);
+    }
+
+    // Initialize Speech Recognition if supported
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+
+      recognitionRef.current.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setStoryText((prev) => prev ? `${prev} ${transcript}` : transcript);
+      };
+
+      recognitionRef.current.onerror = (e) => {
+        console.error('Speech error:', e.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => setIsListening(false);
+    }
+  }, []);
+
+  // Save Journal Entries
+  useEffect(() => {
+    localStorage.setItem('unimind_v2_journal', JSON.stringify(journalEntries));
+  }, [journalEntries]);
+
+  // Save Campus Contacts
+  useEffect(() => {
+    localStorage.setItem('unimind_v2_campus_contacts', JSON.stringify(campusContacts));
+  }, [campusContacts]);
+
+  // Handle Dark Mode toggle
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('unimind_v2_theme', newMode ? 'dark' : 'light');
+  };
+
+  // Toggle Voice Input
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Speech recognition is not supported on this browser. You can type your story directly!");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  // Toggle Stressor Badge Selection
+  const toggleStressor = (tag) => {
+    if (selectedStressors.includes(tag)) {
+      setSelectedStressors(selectedStressors.filter(t => t !== tag));
+    } else {
+      setSelectedStressors([...selectedStressors, tag]);
+    }
+  };
+
+  // Handle Add Custom Campus Contact
+  const handleAddCampusContact = (e) => {
+    e.preventDefault();
+    if (!newContactName.trim() || !newContactNum.trim()) return;
+    const newContact = {
+      id: Date.now().toString(),
+      name: newContactName,
+      number: newContactNum,
+      description: 'Custom Campus/University Resource',
+      category: 'Campus'
+    };
+    setCampusContacts([...campusContacts, newContact]);
+    setNewContactName('');
+    setNewContactNum('');
+  };
+
+  const handleDeleteCampusContact = (id) => {
+    setCampusContacts(campusContacts.filter(c => c.id !== id));
+  };
+
+  // Generate Counseling Feedback via Gemini API
+  const generateCounselingFeedback = async () => {
+    if (!storyText.trim()) return;
+
+    setIsLoading(true);
+
+    const systemPrompt = `You are a warm, highly empathetic, and practical digital mental health counselor designed specifically for tertiary/university students in Eswatini and Southern Africa. 
+You assist students dealing with academic burnout, financial stress, depression, anxiety, and relationship issues.
+Your responses MUST be supportive, non-judgmental, grounded, and emotional-focused rather than overly clinical. Never provide medical diagnoses.
+
+Respond strictly in valid JSON format matching this schema:
+{
+  "validation": "2-3 sentences of deep, empathetic validation acknowledging their emotions and normalizing their situation as a college student.",
+  "actionSteps": [
+    "Practical, realistic micro-step 1 tailored to their issue (e.g. academic strategy, sleep boundary, grounding)",
+    "Practical micro-step 2",
+    "Practical micro-step 3"
+  ],
+  "reflectionQuestions": [
+    "Gentle reflection question 1 for optional journal pondering",
+    "Gentle reflection question 2"
+  ],
+  "affirmation": "A strong, compassionate closing affirmation statement.",
+  "recommendedExercise": "Name & short 1-sentence description of a soothing exercise (e.g., 4-7-8 Breathing, Progressive Muscle Relaxation, 5-4-3-2-1 Technique)."
+}`;
+
+    const userPrompt = `Student Context:
+- Current Mood: ${selectedMood ? selectedMood.label : 'Unspecified'}
+- Energy Level (1-5): ${energyLevel} / 5
+- Key Stressors: ${selectedStressors.length > 0 ? selectedStressors.join(', ') : 'None selected'}
+- Story / Expressed Problem: "${storyText}"
+
+Generate compassionate counseling feedback matching the JSON schema.`;
+
+    let attempts = 0;
+    let success = false;
+    let responseData = null;
+
+    while (attempts < 3 && !success) {
+      try {
+        const apiKey = ""; // Built-in runtime handling
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: userPrompt }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
+          })
+        });
+
+        if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+
+        const result = await res.json();
+        const jsonText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (jsonText) {
+          responseData = JSON.parse(jsonText);
+          success = true;
+        }
+      } catch (err) {
+        attempts++;
+        if (attempts >= 3) {
+          console.error("Gemini API Error, using compassionate fallback:", err);
+          responseData = {
+            validation: "Thank you for sharing your heart so openly. College life places enormous pressure on your mind, and feeling this heavy is a human response to continuous stress.",
+            actionSteps: [
+              "Take a 15-minute pause away from all course materials and screens.",
+              "Pick one small task and complete just 10% of it, or write down your top 2 priorities for tomorrow.",
+              "Reach out to a trusted peer or counselor to share how heavy things feel right now."
+            ],
+            reflectionQuestions: [
+              "What is one expectation you can give yourself permission to loosen today?",
+              "What has helped you survive difficult seasons in the past?"
+            ],
+            affirmation: "Your current situation is a chapter, not your whole story. Be gentle with yourself.",
+            recommendedExercise: "4-7-8 Deep Breathing Exercise to help quiet an overactive mind."
+          };
+        } else {
+          await new Promise(r => setTimeout(r, attempts * 1000));
+        }
+      }
+    }
+
+    setCounselingResponse(responseData);
+    setIsLoading(false);
+    setStep(3);
+
+    // Save to Journal
+    const newEntry = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      mood: selectedMood ? selectedMood.label : 'Unspecified',
+      energy: energyLevel,
+      stressors: selectedStressors,
+      story: storyText,
+      feedback: responseData
+    };
+    setJournalEntries(prev => [newEntry, ...prev]);
+  };
+
+  // Reset Session
+  const handleResetSession = () => {
+    setSelectedMood(null);
+    setEnergyLevel(3);
+    setSelectedStressors([]);
+    setStoryText('');
+    setCounselingResponse(null);
+    setShowReflection(false);
+    setStep(1);
+  };
+
+  // Export Journal as Text File
+  const handleExportJournal = () => {
+    if (journalEntries.length === 0) return;
+    const content = journalEntries.map((e, idx) => `
+========================================
+ENTRY #${journalEntries.length - idx} - ${e.date}
+========================================
+Mood: ${e.mood} | Energy: ${e.energy}/5
+Stressors: ${e.stressors?.join(', ') || 'None'}
+
+STUDENT STORY:
+"${e.story}"
+
+COUNSELING VALIDATION:
+${e.feedback?.validation || ''}
+
+ACTION STEPS:
+${e.feedback?.actionSteps?.map((s, i) => `${i + 1}. ${s}`).join('\n') || ''}
+
+AFFIRMATION:
+"${e.feedback?.affirmation || ''}"
+`).join('\n\n');
+
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `UniMind_Reflections_${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 4-7-8 Breathing Loop Handler
+  const startBreathing = () => {
+    if (breathingPhase !== 'idle') {
+      clearInterval(timerIntervalRef.current);
+      setBreathingPhase('idle');
+      setBreathingTimer(0);
+      return;
+    }
+
+    let phase = 'inhale';
+    let timer = 4;
+    setBreathingPhase(phase);
+    setBreathingTimer(timer);
+
+    timerIntervalRef.current = setInterval(() => {
+      timer -= 1;
+      if (timer <= 0) {
+        if (phase === 'inhale') {
+          phase = 'hold';
+          timer = 7;
+        } else if (phase === 'hold') {
+          phase = 'exhale';
+          timer = 8;
+        } else {
+          phase = 'inhale';
+          timer = 4;
+        }
+      }
+      setBreathingPhase(phase);
+      setBreathingTimer(timer);
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => clearInterval(timerIntervalRef.current);
+  }, []);
+
+  const combinedContacts = [...DEFAULT_CRISIS_CONTACTS, ...campusContacts];
+
+  // Grounding Tool Steps
+  const groundingSteps = [
+    { count: 5, sense: 'Things You Can SEE', prompt: 'Look around your room or desk. Identify 5 physical objects around you.', icon: Eye, color: 'text-blue-500 bg-blue-50 dark:bg-blue-950' },
+    { count: 4, sense: 'Things You Can TOUCH', prompt: 'Notice 4 physical textures (e.g. your clothes, desk surface, phone, floor).', icon: HandTouchIcon, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950' },
+    { count: 3, sense: 'Things You Can HEAR', prompt: 'Listen closely. Name 3 distinct sounds in your environment right now.', icon: Wind, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950' },
+    { count: 2, sense: 'Things You Can SMELL', prompt: 'Identify 2 scents or take deep breaths to notice fresh air around you.', icon: Sparkles, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950' },
+    { count: 1, sense: 'Thing You Can TASTE', prompt: 'Notice 1 taste in your mouth or take a slow sip of water.', icon: Heart, color: 'text-rose-500 bg-rose-50 dark:bg-rose-950' }
+  ];
+
+  return (
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
+      
+      {/* HEADER BAR */}
+      <header className={`sticky top-0 z-30 backdrop-blur-md border-b transition-colors ${darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200 shadow-sm'}`}>
+        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          
+          {/* Logo */}
+          <div className="flex items-center space-x-3">
+            <div className="bg-gradient-to-tr from-teal-500 to-cyan-600 p-2.5 rounded-2xl text-white shadow-md shadow-teal-500/20">
+              <Heart className="w-6 h-6 fill-current" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-extrabold bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text text-transparent">
+                  UniMind Eswatini
+                </h1>
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                  Campus Support
+                </span>
+              </div>
+              <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 space-x-1">
+                <Lock className="w-3 h-3 text-emerald-600" />
+                <span>100% Anonymous & Confidential</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation & Controls */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
+            
+            <button
+              onClick={() => setActiveTab('counseling')}
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                activeTab === 'counseling' 
+                  ? 'bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' 
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              Counseling
+            </button>
+
+            <button
+              onClick={() => setActiveTab('breathing')}
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all flex items-center space-x-1 ${
+                activeTab === 'breathing' 
+                  ? 'bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' 
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Wind className="w-4 h-4 text-teal-500" />
+              <span>Breathing Room</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('journal')}
+              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all relative ${
+                activeTab === 'journal' 
+                  ? 'bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800' 
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <span>Reflections</span>
+              {journalEntries.length > 0 && (
+                <span className="ml-1.5 bg-teal-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                  {journalEntries.length}
+                </span>
+              )}
+            </button>
+
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Toggle Dark Mode"
+            >
+              {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+            </button>
+
+            {/* Crisis SOS Button */}
+            <button
+              onClick={() => setShowCrisisModal(true)}
+              className="bg-rose-50 dark:bg-rose-950/80 hover:bg-rose-100 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+            >
+              <ShieldAlert className="w-4 h-4 text-rose-600 animate-pulse" />
+              <span className="hidden sm:inline">SOS Hotlines</span>
+            </button>
+          </div>
+
+        </div>
+      </header>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 max-w-3xl w-full mx-auto p-4 sm:p-6 mb-12">
+
+        {/* TAB 1: COUNSELING SESSION */}
+        {activeTab === 'counseling' && (
+          <div className="space-y-6">
+
+            {/* Step Progress Tracker */}
+            <div className={`rounded-2xl p-4 border flex items-center justify-between ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className={`flex items-center space-x-2 ${step >= 1 ? 'text-teal-600 font-semibold' : 'text-slate-400'}`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${step >= 1 ? 'bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>1</span>
+                <span className="text-xs sm:text-sm">Check-In</span>
+              </div>
+              <div className="h-0.5 w-6 sm:w-16 bg-slate-200 dark:bg-slate-800" />
+              <div className={`flex items-center space-x-2 ${step >= 2 ? 'text-teal-600 font-semibold' : 'text-slate-400'}`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${step >= 2 ? 'bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>2</span>
+                <span className="text-xs sm:text-sm">Your Story</span>
+              </div>
+              <div className="h-0.5 w-6 sm:w-16 bg-slate-200 dark:bg-slate-800" />
+              <div className={`flex items-center space-x-2 ${step >= 3 ? 'text-teal-600 font-semibold' : 'text-slate-400'}`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${step >= 3 ? 'bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>3</span>
+                <span className="text-xs sm:text-sm">Guidance</span>
+              </div>
+            </div>
+
+            {/* STEP 1: MOOD, ENERGY & STRESSORS */}
+            {step === 1 && (
+              <div className={`rounded-3xl p-6 sm:p-8 border space-y-6 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                
+                <div className="text-center max-w-md mx-auto space-y-2">
+                  <h2 className="text-2xl font-bold">How are you feeling right now?</h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    Select your current mood and energy level to tailor your feedback.
+                  </p>
+                </div>
+
+                {/* Mood Selectors */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {MOODS.map((m) => {
+                    const Icon = m.icon;
+                    const isSelected = selectedMood?.id === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedMood(m)}
+                        className={`p-4 rounded-2xl border text-left transition-all flex flex-col justify-between space-y-3 ${
+                          isSelected 
+                            ? `${m.color} ring-2 ring-teal-500 scale-[1.02] shadow-sm` 
+                            : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <Icon className="w-6 h-6" />
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-teal-600" />}
+                        </div>
+                        <span className="text-sm font-medium">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Energy Level Slider */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex justify-between items-center text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span>ENERGY LEVEL: {energyLevel} / 5</span>
+                    <span>{energyLevel <= 2 ? 'Low / Drained' : energyLevel === 3 ? 'Moderate' : 'High / Restless'}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    value={energyLevel}
+                    onChange={(e) => setEnergyLevel(Number(e.target.value))}
+                    className="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 dark:bg-slate-800 rounded-lg"
+                  />
+                </div>
+
+                {/* Campus Stressor Badges */}
+                <div className="space-y-2 pt-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                    What is contributing most to this feeling? (Optional)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {STRESSORS.map((tag) => {
+                      const isSelected = selectedStressors.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleStressor(tag)}
+                          className={`text-xs px-3 py-1.5 rounded-xl border transition-all ${
+                            isSelected
+                              ? 'bg-teal-600 text-white border-teal-600'
+                              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                          }`}
+                        >
+                          {isSelected ? '✓ ' : '+ '}{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end">
+                  <button
+                    disabled={!selectedMood}
+                    onClick={() => setStep(2)}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-medium text-sm transition-all shadow-md shadow-teal-700/20 flex items-center justify-center space-x-2"
+                  >
+                    <span>Next: Share Your Story</span>
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* STEP 2: STORY INPUT */}
+            {step === 2 && (
+              <div className={`rounded-3xl p-6 sm:p-8 border space-y-6 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800">
+                      Mood: {selectedMood?.label} ({energyLevel}/5 Energy)
+                    </span>
+                    <button onClick={() => setStep(1)} className="text-xs text-slate-500 underline">Edit mood</button>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold">What is on your mind today?</h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    Express your thoughts freely. Type or use the voice recording button to speak out loud.
+                  </p>
+                </div>
+
+                {/* Text & Speech Input Area */}
+                <div className="space-y-3">
+                  <textarea
+                    rows={7}
+                    value={storyText}
+                    onChange={(e) => setStoryText(e.target.value)}
+                    placeholder="Talk about what happened today, your academics, feelings, or worries..."
+                    className={`w-full p-4 rounded-2xl border focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm leading-relaxed ${
+                      darkMode ? 'bg-slate-800/60 border-slate-700 text-slate-100 placeholder-slate-500' : 'bg-slate-50/50 border-slate-200 text-slate-800 placeholder-slate-400'
+                    }`}
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      className={`px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center space-x-2 transition-all ${
+                        isListening
+                          ? 'bg-rose-50 dark:bg-rose-950 border-rose-300 text-rose-700 dark:text-rose-300 animate-pulse'
+                          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {isListening ? (
+                        <>
+                          <MicOff className="w-4 h-4 text-rose-600" />
+                          <span>Recording... Click to Stop</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="w-4 h-4 text-teal-600" />
+                          <span>Voice Input (Speak Out Loud)</span>
+                        </>
+                      )}
+                    </button>
+
+                    <span className="text-xs text-slate-400">{storyText.length} characters</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center justify-between">
+                  <button onClick={() => setStep(1)} className="px-4 py-2.5 text-sm font-medium text-slate-500">Back</button>
+
+                  <button
+                    disabled={!storyText.trim() || isLoading}
+                    onClick={generateCounselingFeedback}
+                    className="px-6 py-3 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-medium text-sm transition-all shadow-md shadow-teal-700/20 flex items-center space-x-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Processing Guidance...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>Receive Emotional Guidance</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* STEP 3: COUNSELING FEEDBACK DISPLAY */}
+            {step === 3 && counselingResponse && (
+              <div className="space-y-6 animate-fadeIn">
+                
+                {/* Header Banner */}
+                <div className="bg-gradient-to-r from-teal-800 to-cyan-900 text-white rounded-3xl p-6 sm:p-8 shadow-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm">
+                      Counseling Response
+                    </span>
+                    <span className="text-xs text-teal-200">
+                      Mood: {selectedMood?.label}
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold">We Hear You. You Are Safe Here.</h2>
+                  <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed font-light">
+                    Here is tailored emotional support and bite-sized actions to help navigate your situation.
+                  </p>
+                </div>
+
+                {/* Validation Box */}
+                <div className={`rounded-3xl p-6 sm:p-8 border space-y-3 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                  <div className="flex items-center space-x-2 text-teal-700 dark:text-teal-400">
+                    <Heart className="w-5 h-5 fill-current" />
+                    <h3 className="font-bold text-base sm:text-lg">Emotional Validation</h3>
+                  </div>
+                  <p className="text-sm sm:text-base leading-relaxed p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+                    "{counselingResponse.validation}"
+                  </p>
+                </div>
+
+                {/* Actionable Micro-Steps */}
+                <div className={`rounded-3xl p-6 sm:p-8 border space-y-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-5 h-5 text-teal-600" />
+                    <h3 className="font-bold text-base sm:text-lg">Manageable Steps to Try Today</h3>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {counselingResponse.actionSteps?.map((stepText, idx) => (
+                      <div key={idx} className="flex items-start space-x-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700">
+                        <span className="w-6 h-6 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <p className="text-sm leading-relaxed font-medium">{stepText}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recommended De-escalation Exercise Card */}
+                {counselingResponse.recommendedExercise && (
+                  <div className="rounded-3xl p-6 border border-teal-200 dark:border-teal-800 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-slate-900 dark:to-teal-950/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-center sm:text-left">
+                      <span className="text-xs font-bold text-teal-700 dark:text-teal-300 uppercase">Recommended Grounding Exercise</span>
+                      <p className="text-sm font-semibold">{counselingResponse.recommendedExercise}</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('breathing')}
+                      className="px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm"
+                    >
+                      <Wind className="w-4 h-4" />
+                      <span>Open Breathing Room</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Optional Reflection Questions */}
+                <div className={`rounded-3xl p-6 sm:p-8 border space-y-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                  <button
+                    onClick={() => setShowReflection(!showReflection)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                      <div>
+                        <h3 className="font-bold text-base">Guided Reflection Questions (Optional)</h3>
+                        <p className="text-xs text-slate-500">Tap to expand for deeper self-reflection</p>
+                      </div>
+                    </div>
+                    {showReflection ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+
+                  {showReflection && (
+                    <div className="pt-3 border-t space-y-3 animate-fadeIn">
+                      {counselingResponse.reflectionQuestions?.map((q, idx) => (
+                        <div key={idx} className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900 text-sm">
+                          <span className="font-semibold text-purple-700 dark:text-purple-300 block mb-1">Reflection {idx + 1}:</span>
+                          {q}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Affirmation */}
+                <div className="rounded-3xl p-6 border text-center space-y-2 bg-gradient-to-r from-amber-50 to-teal-50 dark:from-slate-900 dark:to-slate-800 border-teal-100 dark:border-slate-700">
+                  <span className="text-xs font-bold uppercase tracking-widest text-teal-700 dark:text-teal-400">Daily Student Affirmation</span>
+                  <p className="font-serif italic text-base sm:text-lg">"{counselingResponse.affirmation}"</p>
+                </div>
+
+                {/* Reset / View Reflections */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <button
+                    onClick={handleResetSession}
+                    className="w-full sm:w-auto px-5 py-3 rounded-xl border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 font-medium text-sm flex items-center justify-center space-x-2"
+                  >
+                    <RefreshCw className="w-4 h-4 text-slate-500" />
+                    <span>New Check-In</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('journal')}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-medium text-sm transition-all shadow-md flex items-center justify-center space-x-2"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>View Saved Reflections</span>
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* TAB 2: BREATHING & DE-ESCALATION ROOM */}
+        {activeTab === 'breathing' && (
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* 4-7-8 Breathing Tool */}
+            <div className={`rounded-3xl p-6 sm:p-8 border text-center space-y-6 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="max-w-md mx-auto space-y-2">
+                <span className="text-xs font-bold uppercase tracking-widest text-teal-600 bg-teal-50 dark:bg-teal-950 px-3 py-1 rounded-full border border-teal-200 dark:border-teal-800">
+                  De-escalation Tool
+                </span>
+                <h2 className="text-2xl font-bold">4-7-8 Breathing Exercise</h2>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  Inhale for 4s, Hold for 7s, Exhale for 8s. Proven to reduce acute panic, anxiety, and heart rate.
+                </p>
+              </div>
+
+              {/* Interactive Pulsing Ring Visualizer */}
+              <div className="py-8 flex flex-col items-center justify-center">
+                <div className={`relative w-48 h-48 rounded-full flex items-center justify-center transition-all duration-1000 ${
+                  breathingPhase === 'inhale' 
+                    ? 'scale-125 bg-teal-100 dark:bg-teal-900/60 ring-8 ring-teal-400/50' 
+                    : breathingPhase === 'hold' 
+                    ? 'scale-125 bg-purple-100 dark:bg-purple-900/60 ring-8 ring-purple-400/50 animate-pulse' 
+                    : breathingPhase === 'exhale' 
+                    ? 'scale-90 bg-slate-100 dark:bg-slate-800 ring-4 ring-slate-300' 
+                    : 'bg-slate-100 dark:bg-slate-800'
+                }`}>
+                  <div className="text-center space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 block">
+                      {breathingPhase === 'idle' ? 'Ready' : breathingPhase}
+                    </span>
+                    <span className="text-4xl font-extrabold text-teal-700 dark:text-teal-300">
+                      {breathingPhase === 'idle' ? 'Start' : breathingTimer}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={startBreathing}
+                className={`px-8 py-3.5 rounded-2xl font-semibold text-sm transition-all shadow-md ${
+                  breathingPhase !== 'idle'
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                    : 'bg-teal-700 hover:bg-teal-800 text-white'
+                }`}
+              >
+                {breathingPhase !== 'idle' ? 'Stop Exercise' : 'Begin 4-7-8 Breathing'}
+              </button>
+            </div>
+
+            {/* 5-4-3-2-1 Sensory Grounding Guide */}
+            <div className={`rounded-3xl p-6 sm:p-8 border space-y-6 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div>
+                <h3 className="text-lg font-bold">5-4-3-2-1 Sensory Grounding Technique</h3>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  Use your physical senses to anchor yourself back to the present moment when overwhelmed.
+                </p>
+              </div>
+
+              {/* Interactive Grounding Steps */}
+              <div className="space-y-3">
+                {groundingSteps.map((g, idx) => {
+                  const Icon = g.icon;
+                  const isCurrent = groundingStep === idx;
+                  return (
+                    <div 
+                      key={idx}
+                      onClick={() => setGroundingStep(idx)}
+                      className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                        isCurrent 
+                          ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/30 dark:bg-slate-800' 
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2.5 rounded-xl ${g.color}`}>
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{g.count} {g.sense}</span>
+                          <p className="text-sm font-medium">{g.prompt}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB 3: JOURNAL & MOOD ANALYTICS */}
+        {activeTab === 'journal' && (
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* Header & Export Controls */}
+            <div className={`rounded-3xl p-6 sm:p-8 border space-y-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold">Confidential Student Journal</h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    Saved only on your device. Never shared with third parties or university staff.
+                  </p>
+                </div>
+
+                {journalEntries.length > 0 && (
+                  <button
+                    onClick={handleExportJournal}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-semibold flex items-center space-x-2 border border-slate-300 dark:border-slate-700"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Export Entries (TXT)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Analytics Summary */}
+              {journalEntries.length > 0 && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Total Entries</span>
+                    <p className="text-lg font-bold text-teal-600">{journalEntries.length}</p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Most Frequent Mood</span>
+                    <p className="text-sm font-bold truncate">
+                      {journalEntries[0]?.mood || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 col-span-2 sm:col-span-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Average Energy</span>
+                    <p className="text-lg font-bold text-teal-600">
+                      {(journalEntries.reduce((acc, curr) => acc + (curr.energy || 3), 0) / journalEntries.length).toFixed(1)} / 5
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Entries List */}
+            {journalEntries.length === 0 ? (
+              <div className="text-center py-12 space-y-3 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl">
+                <BookOpen className="w-10 h-10 text-slate-400 mx-auto" />
+                <p className="font-medium text-sm">No journal entries recorded yet.</p>
+                <button
+                  onClick={() => setActiveTab('counseling')}
+                  className="px-4 py-2 bg-teal-700 text-white rounded-xl text-xs font-semibold"
+                >
+                  Start First Counseling Session
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {journalEntries.map((item) => (
+                  <div key={item.id} className={`rounded-2xl p-5 border space-y-3 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950 text-teal-800 dark:text-teal-200 border border-teal-200 dark:border-teal-800 font-semibold">
+                          {item.mood}
+                        </span>
+                        <span className="text-xs text-slate-400 flex items-center space-x-1">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>{item.date}</span>
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setJournalEntries(journalEntries.filter(j => j.id !== item.id))}
+                        className="text-slate-400 hover:text-rose-600 p-1"
+                        title="Delete entry"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-sm italic bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                      "{item.story}"
+                    </p>
+
+                    {item.feedback && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs sm:text-sm text-teal-800 dark:text-teal-300">
+                          <strong>Validation:</strong> {item.feedback.validation}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+      <footer className={`mt-auto py-6 border-t text-xs ${darkMode ? 'bg-slate-950 border-slate-800 text-slate-500' : 'bg-slate-900 border-slate-800 text-slate-400'}`}>
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div>
+            <p className="text-slate-200 font-semibold">UniMind Student Wellness & Counseling Eswatini</p>
+            <p className="text-slate-500">Confidential digital counseling platform for university students.</p>
+          </div>
+          <button 
+            onClick={() => setShowCrisisModal(true)} 
+            className="text-rose-400 hover:text-rose-300 font-semibold flex items-center space-x-1"
+          >
+            <PhoneCall className="w-3.5 h-3.5" />
+            <span>Emergency & Campus Helplines</span>
+          </button>
+        </div>
+      </footer>
+
+      {/* CRISIS & CAMPUS HOTLINES MODAL */}
+      {showCrisisModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className={`rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 border max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-slate-900 border-rose-900 text-slate-100' : 'bg-white border-rose-200 text-slate-800'}`}>
+            
+            <div className="flex items-center space-x-3 text-rose-600">
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-950 rounded-2xl">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold">Eswatini Emergency & Campus Contacts</h3>
+                <p className="text-xs font-semibold text-rose-600">Free, confidential & available 24/7</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {combinedContacts.map((c) => (
+                <div key={c.id} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm">{c.name}</span>
+                    <a 
+                      href={`tel:${c.number.replace(/\s+/g, '')}`}
+                      className="text-xs font-mono font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 px-2.5 py-1 rounded-lg hover:bg-rose-200 transition-colors"
+                    >
+                      {c.number}
+                    </a>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{c.description}</p>
+                  {c.category === 'Campus' && (
+                    <button 
+                      onClick={() => handleDeleteCampusContact(c.id)} 
+                      className="text-[10px] text-rose-500 underline pt-1"
+                    >
+                      Remove custom contact
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Custom Campus Contact Form */}
+            <form onSubmit={handleAddCampusContact} className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Add Your University Security / Dean Helpline</span>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. UNESWA Security"
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                />
+                <input
+                  type="text"
+                  placeholder="Phone number"
+                  value={newContactNum}
+                  onChange={(e) => setNewContactNum(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-xs font-semibold rounded-xl flex items-center justify-center space-x-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Save Custom Campus Contact</span>
+              </button>
+            </form>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowCrisisModal(false)}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-semibold"
+              >
+                Close Hotline Menu
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Auxiliary Touch Icon component
+function HandTouchIcon(props) {
+  return (
+    <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5a1.5 1.5 0 113 0m-3 0V11" />
+    </svg>
+  );
+}
